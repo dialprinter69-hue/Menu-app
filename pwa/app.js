@@ -4,11 +4,20 @@
 const CONFIG = {
   remoteMenuJsonUrl:
     "https://raw.githubusercontent.com/dialprinter69-hue/delicia-menu/refs/heads/main/menu.json",
+  /**
+   * Carpeta (URL terminada en /) donde están fotos por nombre de bundledDrawable, p. ej.
+   * …/images/menu_tres_leches.webp. Vacío = misma rama que menu.json: …/main/images/
+   */
+  menuImagesBaseUrl: "",
   restaurantWhatsappE164: "19785027983",
   cashAppTag: "$Aleshkamatos6",
   drinkUnitPrice: 2.0,
   deliveryFee: 4.0,
   freeDrinkItemIds: new Set(["dish-arroz-pernil-coditos"]),
+  /** ms entre abrir Cash App y abrir WhatsApp (modo dos pestañas). */
+  cashAppThenWhatsappGapMs: 750,
+  /** Cuenta atrás antes de ir a WhatsApp en la misma pestaña (modo retraso). */
+  cashAppWhatsappSameTabDelayMs: 3000,
 };
 
 const DRINK_LABELS = ["Coca Cola", "Fanta", "Sprite", "Diet Coke", "Agua"];
@@ -19,10 +28,66 @@ const state = {
   drinks: Object.fromEntries(DRINK_LABELS.map((d) => [d, 0])),
   delivery: false,
   paymentCashApp: false,
+  /** "quick" = Cash App y WhatsApp en pestañas seguidas; "delay" = luego WhatsApp en esta pestaña. */
+  cashAppFlowMode: "quick",
   loadError: null,
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
+
+const MENU_CARD_IMAGE_EXTS = [".webp", ".png", ".jpg", ".jpeg"];
+
+function directoryOfMenuJsonUrl(menuJsonUrl) {
+  const t = String(menuJsonUrl || "").trim();
+  if (!t) return "";
+  try {
+    const u = new URL(t);
+    u.pathname = u.pathname.replace(/[^/]+$/, "");
+    return u.href;
+  } catch {
+    return "";
+  }
+}
+
+function imagesFolderFromMenuJsonUrl(menuJsonUrl) {
+  const t = String(menuJsonUrl || "").trim();
+  if (!t) return "";
+  try {
+    const u = new URL(t);
+    if (!/menu\.json$/i.test(u.pathname)) return "";
+    u.pathname = u.pathname.replace(/menu\.json$/i, "images/");
+    return u.href;
+  } catch {
+    return "";
+  }
+}
+
+function folderForBundledMenuImages() {
+  const manual = String(CONFIG.menuImagesBaseUrl || "").trim();
+  if (manual) return manual.replace(/\/?$/, "/");
+  return imagesFolderFromMenuJsonUrl(CONFIG.remoteMenuJsonUrl);
+}
+
+/** Lista de URLs a probar (orden) para la miniatura del plato. */
+function resolveMenuImageCandidates(item) {
+  const direct = String(item.imageUrl || "").trim();
+  if (direct) return [direct];
+  const rel = String(item.imageRelativePath || "").trim();
+  const dir = directoryOfMenuJsonUrl(CONFIG.remoteMenuJsonUrl);
+  if (rel && dir) return [`${dir}${rel.replace(/^\//, "")}`];
+  const bd = String(item.bundledDrawable || "").trim();
+  const imgDir = folderForBundledMenuImages();
+  if (bd && imgDir) return MENU_CARD_IMAGE_EXTS.map((ext) => `${imgDir}${bd}${ext}`);
+  return [];
+}
+
+function makeMenuImagePlaceholder() {
+  const el = document.createElement("div");
+  el.className = "menu-card-img";
+  el.setAttribute("role", "presentation");
+  el.style.background = "linear-gradient(145deg,#1E3D2F,#2D5A45)";
+  return el;
+}
 
 function parsePriceToDouble(raw) {
   const normalized = String(raw)
@@ -46,6 +111,9 @@ function loadState() {
     }
     if (typeof data.delivery === "boolean") state.delivery = data.delivery;
     if (typeof data.paymentCashApp === "boolean") state.paymentCashApp = data.paymentCashApp;
+    if (data.cashAppFlowMode === "quick" || data.cashAppFlowMode === "delay") {
+      state.cashAppFlowMode = data.cashAppFlowMode;
+    }
   } catch {
     /* ignore */
   }
@@ -57,6 +125,7 @@ function saveState() {
     drinks: { ...state.drinks },
     delivery: state.delivery,
     paymentCashApp: state.paymentCashApp,
+    cashAppFlowMode: state.cashAppFlowMode,
   };
   sessionStorage.setItem("delicias_pwa_state", JSON.stringify(data));
 }
@@ -163,18 +232,29 @@ function renderMenu() {
   for (const item of state.menu) {
     const card = document.createElement("article");
     card.className = "menu-card";
+    const candidates = resolveMenuImageCandidates(item);
     let img;
-    if (item.imageUrl) {
-      img = document.createElement("img");
-      img.className = "menu-card-img";
-      img.alt = "";
-      img.src = item.imageUrl;
-      img.loading = "lazy";
+    if (candidates.length > 0) {
+      const el = document.createElement("img");
+      el.className = "menu-card-img";
+      el.alt = item.name || "";
+      el.loading = "lazy";
+      el.decoding = "async";
+      el.referrerPolicy = "no-referrer";
+      let i = 0;
+      el.addEventListener("error", function onImgErr() {
+        i += 1;
+        if (i < candidates.length) {
+          el.src = candidates[i];
+        } else {
+          el.removeEventListener("error", onImgErr);
+          el.replaceWith(makeMenuImagePlaceholder());
+        }
+      });
+      el.src = candidates[0];
+      img = el;
     } else {
-      img = document.createElement("div");
-      img.className = "menu-card-img";
-      img.setAttribute("role", "presentation");
-      img.style.background = "linear-gradient(145deg,#1E3D2F,#2D5A45)";
+      img = makeMenuImagePlaceholder();
     }
     const body = document.createElement("div");
     body.className = "menu-card-body";
@@ -254,6 +334,24 @@ function renderOrder() {
     const el = document.querySelector(`[data-drink-qty="${CSS.escape(d)}"]`);
     if (el) el.textContent = String(state.drinks[d] || 0);
   }
+
+  const payHint = $("#pay-cashapp-hint");
+  const cashPanel = $("#cash-app-flow-panel");
+  const submitBtn = $("#submit-order");
+  if (payHint && cashPanel && submitBtn) {
+    const isCa = state.paymentCashApp;
+    payHint.hidden = !isCa;
+    cashPanel.hidden = !isCa;
+    submitBtn.textContent = isCa ? "Pagar Cash App y hacer pedido" : "Hacer pedido";
+    const manual = $("#cash-manual-wrap");
+    if (manual && !isCa) manual.hidden = true;
+  }
+  const cq = $("#cashflow-quick");
+  const cd = $("#cashflow-delay");
+  if (cq && cd) {
+    cq.checked = state.cashAppFlowMode === "quick";
+    cd.checked = state.cashAppFlowMode === "delay";
+  }
 }
 
 function render() {
@@ -281,6 +379,19 @@ function setupForm() {
     state.paymentCashApp = true;
     saveState();
     renderOrder();
+  });
+
+  $("#cashflow-quick")?.addEventListener("change", () => {
+    if ($("#cashflow-quick")?.checked) {
+      state.cashAppFlowMode = "quick";
+      saveState();
+    }
+  });
+  $("#cashflow-delay")?.addEventListener("change", () => {
+    if ($("#cashflow-delay")?.checked) {
+      state.cashAppFlowMode = "delay";
+      saveState();
+    }
   });
 
   for (const d of DRINK_LABELS) {
@@ -312,19 +423,17 @@ function selectedDrinksList() {
   return DRINK_LABELS.filter((d) => (state.drinks[d] || 0) > 0).map((d) => `${state.drinks[d]}× ${d}`);
 }
 
-function submitOrder() {
-  const name = $("#customer-name")?.value?.trim() || "";
-  const phone = $("#customer-phone")?.value?.trim() || "";
-  const town = $("#customer-town")?.value?.trim() || "";
-  if (!name || !phone || !town) {
-    alert("Completa nombre, teléfono y pueblo.");
-    return;
-  }
-  if (cartCount() === 0) {
-    alert("Agrega al menos un plato al pedido.");
-    return;
-  }
+function cashAppPayUrl(total) {
+  const tag = String(CONFIG.cashAppTag || "")
+    .trim()
+    .replace(/^\$/, "");
+  if (!tag) return "";
+  const amt = Number(total);
+  if (!Number.isFinite(amt) || amt <= 0) return `https://cash.app/$${tag}`;
+  return `https://cash.app/$${tag}/${amt.toFixed(2)}`;
+}
 
+function buildOrderWhatsappPayload(name, phone, town) {
   const paymentMethod = state.paymentCashApp ? "Cash App" : "Efectivo";
   const drinks = selectedDrinksList();
   const fmt = new Intl.DateTimeFormat("es", { dateStyle: "short", timeStyle: "short" }).format(new Date());
@@ -358,29 +467,147 @@ function submitOrder() {
   text += "==========================\n";
 
   const businessPhone = CONFIG.restaurantWhatsappE164.replace(/\D/g, "");
-  if (businessPhone.length < 10) {
-    alert("Configura el WhatsApp del negocio en app.js (restaurantWhatsappE164).");
-    return;
-  }
-
+  if (businessPhone.length < 10) return { error: "Configura el WhatsApp del negocio en app.js (restaurantWhatsappE164)." };
   const wa = `https://wa.me/${businessPhone}?text=${encodeURIComponent(text)}`;
-  window.open(wa, "_blank", "noopener,noreferrer");
+  return { text, total, wa };
+}
 
-  if (state.paymentCashApp) {
-    const tag = CONFIG.cashAppTag.trim().replace(/^\$/, "");
-    if (tag) {
-      const cashUrl = `https://cash.app/$${tag}/${total.toFixed(2)}`;
-      window.open(cashUrl, "_blank", "noopener,noreferrer");
-    }
-  }
-
+function resetOrderFormAfterSend() {
   state.cart = new Map();
   for (const d of DRINK_LABELS) state.drinks[d] = 0;
   state.delivery = false;
   state.paymentCashApp = false;
+  $("#customer-name") && ($("#customer-name").value = "");
+  $("#customer-phone") && ($("#customer-phone").value = "");
+  $("#customer-town") && ($("#customer-town").value = "");
+  const wrap = $("#cash-manual-wrap");
+  if (wrap) wrap.hidden = true;
   saveState();
-  alert("Listo. Envía el mensaje en WhatsApp para confirmar el pedido.");
   render();
+}
+
+function showCashManualLink(cashUrl) {
+  const wrap = $("#cash-manual-wrap");
+  const a = $("#manual-cash-link");
+  if (wrap && a) {
+    a.href = cashUrl;
+    wrap.hidden = false;
+  }
+}
+
+/**
+ * Abre Cash App (primera acción en el clic = menos bloqueos). Devuelve si se abrió una pestaña.
+ */
+function tryOpenCashAppNewTab(cashUrl) {
+  const w = window.open(cashUrl, "_blank", "noopener,noreferrer");
+  return !!(w && !w.closed);
+}
+
+function openWhatsappUrl(waUrl) {
+  const w = window.open(waUrl, "_blank", "noopener,noreferrer");
+  if (!w || w.closed) {
+    window.location.href = waUrl;
+  }
+}
+
+function showWhatsappDelayThenNavigate(waUrl, onLeave) {
+  const overlay = $("#whatsapp-delay-overlay");
+  const countEl = $("#wa-delay-count");
+  const btnNow = $("#wa-delay-now");
+  const btnCancel = $("#wa-delay-cancel");
+  if (!overlay || !countEl || !btnNow || !btnCancel) {
+    window.location.href = waUrl;
+    onLeave();
+    return;
+  }
+
+  const delaySec = Math.max(1, Math.round((CONFIG.cashAppWhatsappSameTabDelayMs || 3000) / 1000));
+  let left = delaySec;
+  countEl.textContent = String(left);
+  overlay.hidden = false;
+
+  let intervalId = null;
+  const go = () => {
+    if (intervalId) clearInterval(intervalId);
+    intervalId = null;
+    overlay.hidden = true;
+    btnNow.onclick = null;
+    btnCancel.onclick = null;
+    onLeave();
+    window.location.href = waUrl;
+  };
+  const cancel = () => {
+    if (intervalId) clearInterval(intervalId);
+    intervalId = null;
+    overlay.hidden = true;
+    btnNow.onclick = null;
+    btnCancel.onclick = null;
+  };
+
+  btnNow.onclick = () => go();
+  btnCancel.onclick = () => cancel();
+
+  intervalId = setInterval(() => {
+    left -= 1;
+    countEl.textContent = String(Math.max(0, left));
+    if (left <= 0) go();
+  }, 1000);
+}
+
+function submitOrder() {
+  const name = $("#customer-name")?.value?.trim() || "";
+  const phone = $("#customer-phone")?.value?.trim() || "";
+  const town = $("#customer-town")?.value?.trim() || "";
+  if (!name || !phone || !town) {
+    alert("Completa nombre, teléfono y pueblo.");
+    return;
+  }
+  if (cartCount() === 0) {
+    alert("Agrega al menos un plato al pedido.");
+    return;
+  }
+
+  const payload = buildOrderWhatsappPayload(name, phone, town);
+  if ("error" in payload) {
+    alert(payload.error);
+    return;
+  }
+  const { wa, total } = payload;
+
+  if (!state.paymentCashApp) {
+    openWhatsappUrl(wa);
+    resetOrderFormAfterSend();
+    alert("Listo. Envía el mensaje que se abrió para confirmar el pedido.");
+    return;
+  }
+
+  const cashUrl = cashAppPayUrl(total);
+  if (!cashUrl) {
+    alert("Configura el cashtag de Cash App en app.js (cashAppTag).");
+    return;
+  }
+
+  if (state.cashAppFlowMode === "delay") {
+    const opened = tryOpenCashAppNewTab(cashUrl);
+    if (!opened) {
+      showCashManualLink(cashUrl);
+      alert("No se pudo abrir Cash App automáticamente. Usa el enlace debajo del botón.");
+    }
+    showWhatsappDelayThenNavigate(wa, () => resetOrderFormAfterSend());
+    return;
+  }
+
+  const openedCash = tryOpenCashAppNewTab(cashUrl);
+  if (!openedCash) {
+    showCashManualLink(cashUrl);
+  }
+
+  const gap = Math.max(200, Number(CONFIG.cashAppThenWhatsappGapMs) || 750);
+  setTimeout(() => {
+    openWhatsappUrl(wa);
+    resetOrderFormAfterSend();
+    alert("Listo: revisa Cash App y el chat que se abrió. Confirma el pedido enviando el mensaje.");
+  }, gap);
 }
 
 async function init() {

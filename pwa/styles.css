@@ -324,6 +324,65 @@ input[type="tel"] {
   padding: 1rem;
 }
 
+.cash-app-flow-panel {
+  margin: 0.75rem 0 1rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius);
+  background: #fff;
+  border: 1px solid rgba(184, 76, 47, 0.25);
+}
+
+.cash-app-flow-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--moss);
+}
+
+.cash-app-flow-option {
+  display: block;
+  margin: 0.45rem 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.cash-app-flow-option input {
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.wa-delay-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(42, 33, 24, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.wa-delay-dialog {
+  max-width: 400px;
+  background: var(--cream);
+  color: var(--ink);
+  padding: 1.25rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.wa-delay-dialog p {
+  margin: 0 0 1rem;
+  line-height: 1.5;
+}
+
+.wa-delay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 @media (max-width: 520px) {
   .menu-card {
     grid-template-columns: 96px 1fr;

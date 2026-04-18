@@ -59,7 +59,21 @@
           <label><input type="radio" name="pay" id="pay-cash" checked /> Efectivo</label>
           <label><input type="radio" name="pay" id="pay-cashapp" /> Cash App</label>
         </div>
-        <p class="notice">Después de pagar por Cash App, confirma tu pedido por WhatsApp.</p>
+        <p class="notice" id="pay-cashapp-hint" hidden>
+          Al tocar el botón: 1) se abre Cash App con el total para pagar; 2) luego WhatsApp con tu resumen para enviarlo al restaurante (casi a la vez, o con cuenta atrás si eliges la opción de abajo).
+        </p>
+
+        <div id="cash-app-flow-panel" class="cash-app-flow-panel" hidden>
+          <p class="cash-app-flow-title">Después de Cash App, ¿cómo abrir WhatsApp?</p>
+          <label class="cash-app-flow-option">
+            <input type="radio" name="cashflow" id="cashflow-quick" checked />
+            Casi al mismo tiempo: Cash App en una pestaña y WhatsApp en otra (~0,7 s). Recomendado si permites ventanas emergentes.
+          </label>
+          <label class="cash-app-flow-option">
+            <input type="radio" name="cashflow" id="cashflow-delay" />
+            Con retraso: Cash App en una pestaña; luego <strong>esta ventana</strong> irá a WhatsApp en 3 segundos (útil si el navegador bloquea la segunda pestaña).
+          </label>
+        </div>
 
         <div class="field-grid">
           <label>
@@ -76,11 +90,29 @@
           </label>
         </div>
 
+        <p class="notice" id="cash-manual-wrap" hidden>
+          Si no se abrió Cash App,
+          <a id="manual-cash-link" href="#" target="_blank" rel="noopener noreferrer">toca aquí para abrirlo con el total</a>.
+        </p>
+
         <button type="button" class="btn btn-primary" id="submit-order" style="width: 100%; padding: 0.85rem">
-          Enviar por WhatsApp
+          Hacer pedido
         </button>
       </section>
     </main>
+
+    <div id="whatsapp-delay-overlay" class="wa-delay-overlay" hidden aria-live="polite">
+      <div class="wa-delay-dialog">
+        <p>
+          Cash App debería haberse abierto en otra pestaña. Esta ventana irá a WhatsApp con tu pedido en
+          <strong id="wa-delay-count">3</strong> s.
+        </p>
+        <div class="wa-delay-actions">
+          <button type="button" class="btn btn-primary" id="wa-delay-now">Ir a WhatsApp ahora</button>
+          <button type="button" class="btn btn-secondary" id="wa-delay-cancel">Cancelar</button>
+        </div>
+      </div>
+    </div>
 
     <div class="fab-bar">
       <button type="button" class="btn btn-primary" id="fab-order" disabled>Hacer pedido</button>

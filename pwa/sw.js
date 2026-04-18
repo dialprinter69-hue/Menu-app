@@ -1,4 +1,4 @@
-const CACHE = "delicias-pwa-v1";
+const CACHE = "delicias-pwa-v3";
 const PRECACHE = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icons/icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -60,19 +60,5 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (request.destination === "image") {
-    event.respondWith(
-      caches.match(request).then(
-        (hit) =>
-          hit ||
-          fetch(request).then((res) => {
-            if (res.ok) {
-              const copy = res.clone();
-              caches.open(CACHE).then((c) => c.put(request, copy));
-            }
-            return res;
-          })
-      )
-    );
-  }
+  /* Imágenes del menú: sin interceptar — evita caché del SW que rompa <img> cross-origin. */
 });
