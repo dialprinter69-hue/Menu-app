@@ -13,7 +13,7 @@ const CONFIG = {
   cashAppTag: "$Aleshkamatos6",
   drinkUnitPrice: 2.0,
   deliveryFee: 4.0,
-  freeDrinkItemIds: new Set(["dish-arroz-pernil-coditos"]),
+  freeDrinkItemIds: new Set(["dish-papas-supreme"]),
   /** ms entre abrir Cash App y abrir WhatsApp (modo dos pestañas). */
   cashAppThenWhatsappGapMs: 750,
   /** Cuenta atrás antes de ir a WhatsApp en la misma pestaña (modo retraso). */
@@ -281,7 +281,6 @@ function renderMenu() {
 function renderOrder() {
   const linesEl = $("#order-lines");
   const summaryEl = $("#order-summary");
-  const fab = $("#fab-order");
   if (!linesEl || !summaryEl) return;
 
   linesEl.innerHTML = "";
@@ -321,7 +320,9 @@ function renderOrder() {
   } else {
     summaryEl.textContent = `${count} plato(s) en el pedido · Total: $${total.toFixed(2)}`;
   }
-  if (fab) fab.disabled = count === 0;
+
+  const submitOrderBtn = $("#submit-order");
+  if (submitOrderBtn) submitOrderBtn.disabled = count === 0;
 
   const delSwitch = $("#delivery-switch");
   if (delSwitch) delSwitch.checked = state.delivery;
@@ -342,7 +343,7 @@ function renderOrder() {
     const isCa = state.paymentCashApp;
     payHint.hidden = !isCa;
     cashPanel.hidden = !isCa;
-    submitBtn.textContent = isCa ? "Pagar Cash App y hacer pedido" : "Hacer pedido";
+    submitBtn.textContent = isCa ? "Pagar + WhatsApp" : "Enviar por WhatsApp";
     const manual = $("#cash-manual-wrap");
     if (manual && !isCa) manual.hidden = true;
   }
@@ -410,10 +411,6 @@ function setupForm() {
   $("#btn-refresh-menu")?.addEventListener("click", async () => {
     await fetchMenu();
     render();
-  });
-
-  $("#fab-order")?.addEventListener("click", () => {
-    document.getElementById("order")?.scrollIntoView({ behavior: "smooth" });
   });
 
   $("#submit-order")?.addEventListener("click", submitOrder);

@@ -91,6 +91,11 @@ button:active,
   background: var(--terracotta-dark);
 }
 
+.btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .btn-gold {
   background: var(--gold);
   color: var(--ink);
@@ -104,7 +109,7 @@ button:active,
 main {
   max-width: 720px;
   margin: 0 auto;
-  padding: 1rem 1rem 6rem;
+  padding: 1rem 1rem calc(1.25rem + env(safe-area-inset-bottom));
 }
 
 section h2 {
@@ -289,33 +294,6 @@ input[type="tel"] {
   border-radius: 8px;
   margin-bottom: 1rem;
   font-size: 0.9rem;
-}
-
-.fab-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 0.75rem 1rem calc(0.75rem + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, transparent, var(--cream) 35%);
-  display: flex;
-  justify-content: center;
-  z-index: 30;
-  pointer-events: none;
-}
-
-.fab-bar .btn-primary {
-  pointer-events: auto;
-  min-width: min(100%, 360px);
-  padding: 0.85rem 1.25rem;
-  font-weight: 700;
-  box-shadow: 0 6px 20px rgba(184, 76, 47, 0.35);
-}
-
-.fab-bar .btn-primary:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 
 .empty-hint {
